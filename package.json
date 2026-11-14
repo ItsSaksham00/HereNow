@@ -1,0 +1,12 @@
+{
+  "name": "herenow",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/api", "apps/mobile"],
+  "scripts": {
+    "api": "npm run start:dev --workspace=apps/api",
+    "mobile": "npm run start --workspace=apps/mobile",
+    "build:api": "npm run build --workspace=apps/api"
+  },
+  "engines": { "node": ">=22.13.0" }
+}

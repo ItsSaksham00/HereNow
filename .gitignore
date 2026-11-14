@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build files
+dist/
+build/
+.expo/
+.expo-shared/
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

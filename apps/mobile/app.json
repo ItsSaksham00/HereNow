@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "HereNow",
+    "slug": "herenow",
+    "scheme": "herenow",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Find nearby activities and add your approximate activity location.",
+        "NSCameraUsageDescription": "Take a photo to create a HereNow activity."
+      }
+    },
+    "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose an image for a nearby activity.",
+          "cameraPermission": "Take an image for a nearby activity."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Find nearby activities and add approximate activity locations."
+        }
+      ],
+      "expo-secure-store",
+      "expo-status-bar"
+    ]
+  }
+}
