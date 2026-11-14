@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
+// Starts the API with its shared validation and route prefix.
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors(); // Restrict origins before deploying browser clients.

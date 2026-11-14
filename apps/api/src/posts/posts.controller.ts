@@ -8,15 +8,54 @@ import type { AuthRequest } from '../auth/auth.guard';
 @Controller('posts')
 export class PostsController {
   constructor(private readonly posts: PostsService) {}
-  @Get('nearby') nearby(@Req() req: AuthRequest, @Query() query: NearbyQuery) { return this.posts.nearby(req.userId, query); }
-  @Get('mine') mine(@Req() req: AuthRequest) { return this.posts.myPosts(req.userId); }
-  @Get(':id') one(@Req() req: AuthRequest, @Param('id', ParseUUIDPipe) id: string) { return this.posts.post(req.userId, id); }
+
+  // Returns activities near the requested location.
+  @Get('nearby')
+  nearby(@Req() request: AuthRequest, @Query() query: NearbyQuery) {
+    return this.posts.nearby(request.userId, query);
+  }
+
+  // Returns the signed-in user’s posts.
+  @Get('mine')
+  mine(@Req() request: AuthRequest) {
+    return this.posts.myPosts(request.userId);
+  }
+
+  // Returns the requested activity.
+  @Get(':id')
+  one(@Req() request: AuthRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.posts.post(request.userId, id);
+  }
+
+  // Publishes a photo and the details entered by the user.
   @Post()
   @UseInterceptors(FileInterceptor('photo', { storage: memoryStorage(), limits: { fileSize: 6 * 1024 * 1024 } }))
-  create(@Req() req: AuthRequest, @Body() body: CreatePostDto, @UploadedFile() file: Express.Multer.File) {
-    return this.posts.create(req.userId, body, file);
+  create(@Req() request: AuthRequest, @Body() body: CreatePostDto, @UploadedFile() file: Express.Multer.File) {
+    return this.posts.create(request.userId, body, file);
   }
-  @Post(':id/analyze') analyze(@Req() req: AuthRequest, @Param('id', ParseUUIDPipe) id: string) { return this.posts.analyze(id, req.userId); }
-  @Post(':id/publish') publish(@Req() req: AuthRequest, @Param('id', ParseUUIDPipe) id: string) { return this.posts.publish(req.userId, id); }
-  @Delete(':id') delete(@Req() req: AuthRequest, @Param('id', ParseUUIDPipe) id: string) { return this.posts.delete(req.userId, id); }
+
+  // Returns optional AI suggestions without saving a post.
+  @Post('suggest')
+  @UseInterceptors(FileInterceptor('photo', { storage: memoryStorage(), limits: { fileSize: 6 * 1024 * 1024 } }))
+  suggest(@UploadedFile() file: Express.Multer.File) {
+    return this.posts.suggest(file);
+  }
+
+  // Retries photo analysis for an owned activity.
+  @Post(':id/analyze')
+  analyze(@Req() request: AuthRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.posts.analyze(id, request.userId);
+  }
+
+  // Publishes an owned activity that is ready.
+  @Post(':id/publish')
+  publish(@Req() request: AuthRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.posts.publish(request.userId, id);
+  }
+
+  // Deletes an activity owned by the signed-in user.
+  @Delete(':id')
+  delete(@Req() request: AuthRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.posts.delete(request.userId, id);
+  }
 }

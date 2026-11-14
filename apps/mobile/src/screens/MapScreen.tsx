@@ -1,29 +1,129 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Text, useWindowDimensions, View } from 'react-native';
 import MapView, { Circle, Marker, Region } from 'react-native-maps';
 import { Center } from './LocationScreen';
-import { api, nearbyUrl, Post } from '../lib/api';
-import { Btn, ErrorText, Layout, Muted, Title } from '../components/ui';
+import { activityFilters, ActivityFilter, api, nearbyUrl, Post } from '../lib/api';
+import { Btn, ErrorText, Layout, Loading, Muted, Select, Title } from '../components/ui';
+import { LocationSearch } from '../components/LocationSearch';
 import { C } from '../theme/theme';
 
-export function MapScreen({ center, onSelect, onPost, onBack }: { center: Center; onSelect: (c: Center) => void; onPost: (id:string) => void; onBack: () => void }) {
-  const [mapCenter, setMapCenter] = useState(center); const [posts, setPosts] = useState<Post[]>([]);
-  const [radius, setRadius] = useState(10); const [error, setError] = useState<string|null>(null);
-  const load = useCallback(async () => {
-    try { setPosts(await api<Post[]>(nearbyUrl(mapCenter.latitude, mapCenter.longitude, radius, 'All', ''))); setError(null); }
-    catch (e: any) { setError(e.message); }
+const radiusOptions = [0.5, 1, 2, 5, 10, 25, 50].map(value => ({ value: String(value), label: `${value} ${value === 1 ? 'mile' : 'miles'}` }));
+
+// Shows a bounded map with place search and a shared feed radius.
+export function MapScreen({ center, radius, onRadiusChange, onSelect, onPost, onBack }: {
+  center: Center;
+  radius: number;
+  onRadiusChange: (radius: number) => void;
+  onSelect: (center: Center, radius: number) => void;
+  onPost: (id: string) => void;
+  onBack: () => void;
+}) {
+  const [mapCenter, setMapCenter] = useState(center);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [time, setTime] = useState<ActivityFilter>('now');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const map = useRef<MapView>(null);
+  const { height, width } = useWindowDimensions();
+  const mapHeight = Math.max(220, Math.min(360, height * 0.43));
+  const region: Region = {
+    latitude: mapCenter.latitude,
+    longitude: mapCenter.longitude,
+    latitudeDelta: radius * 2.5 / 69,
+    longitudeDelta: Math.min(180, radius * 2.5 / (69 * Math.max(0.1, Math.cos(mapCenter.latitude * Math.PI / 180))) * Math.max(1, (width - 40) / mapHeight)),
+  };
+
+  useEffect(() => {
+    let current = true;
+    // Loads activities for this selection and ignores responses from older selections.
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const nextPosts = await api<Post[]>(nearbyUrl(mapCenter.latitude, mapCenter.longitude, radius, 'All', '', time));
+        if (current) setPosts(nextPosts);
+      } catch (error: any) {
+        if (current) { setPosts([]); setError(error.message); }
+      } finally {
+        if (current) setLoading(false);
+      }
+    }
+    void load();
+    return () => { current = false; };
+  }, [mapCenter.latitude, mapCenter.longitude, radius, time]);
+  useEffect(() => {
+    map.current?.animateToRegion(region, 300);
   }, [mapCenter.latitude, mapCenter.longitude, radius]);
-  useEffect(() => { void load(); }, [load]);
-  const initialRegion: Region = { latitude: center.latitude, longitude: center.longitude, latitudeDelta: 0.15, longitudeDelta: 0.15 };
-  return <Layout scroll={false}>
-    <View style={{ padding: 20, paddingBottom: 8 }}><Text style={{ color: C.green }} onPress={onBack}>‹ Back</Text><Title>Explore an area.</Title><Muted>Tap the map to choose a search center. Markers show published activity locations.</Muted>
-      <View style={{ flexDirection: 'row', gap: 8, marginVertical: 9 }}><Text style={{ color: C.muted }} onPress={() => setRadius(2)}>2 mi</Text><Text style={{ color: C.muted }} onPress={() => setRadius(5)}> · 5 mi</Text><Text style={{ color: C.muted }} onPress={() => setRadius(10)}> · 10 mi</Text><Text style={{ color: C.muted }} onPress={() => setRadius(25)}> · 25 mi</Text></View>
-      <Muted>{posts.length} activities within {radius} mi</Muted><ErrorText message={error}/></View>
-    <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={e => setMapCenter({ latitude: e.nativeEvent.coordinate.latitude, longitude: e.nativeEvent.coordinate.longitude, name: 'Custom selected map area', isManual: true })}>
-      <Marker coordinate={{ latitude: mapCenter.latitude, longitude: mapCenter.longitude }} title="Search center" pinColor={C.green}/>
-      <Circle center={{ latitude: mapCenter.latitude, longitude: mapCenter.longitude }} radius={radius * 1609.344} strokeColor={C.green} fillColor="rgba(23,107,85,0.08)"/>
-      {posts.map(p => <Marker key={p.id} coordinate={{ latitude: p.latitude, longitude: p.longitude }} title={p.title || 'Activity'} description={p.place_name} onCalloutPress={() => onPost(p.id)} />)}
-    </MapView>
-    <View style={{ backgroundColor: C.canvas, paddingHorizontal: 20, paddingBottom: 12 }}><Btn label="Explore this area →" onPress={() => onSelect(mapCenter)}/></View>
-  </Layout>;
+  return (
+    <Layout>
+      <Text accessibilityRole="button" style={{ color: C.green }} onPress={onBack}>‹ Back</Text>
+      <Title>Explore an area.</Title>
+      <LocationSearch onSelect={setMapCenter} />
+      <Select
+        label="Search radius"
+        value={String(radius)}
+        options={radiusOptions}
+        onSelect={value => onRadiusChange(Number(value))}
+      />
+      <View style={{ flexDirection: 'row', gap: 18, marginVertical: 12 }}>
+        {activityFilters.map(({ value, label }) => (
+          <Text
+            key={value}
+            accessibilityRole="button"
+            style={{ color: time === value ? C.green : C.muted, fontWeight: time === value ? '700' : '400' }}
+            onPress={() => setTime(value)}
+          >
+            {label}
+          </Text>
+        ))}
+      </View>
+      <Muted>📍 {mapCenter.name}</Muted>
+      <View
+        style={{
+          height: mapHeight,
+          width: '100%',
+          borderRadius: 23,
+          overflow: 'hidden',
+          marginVertical: 14,
+          borderWidth: 1,
+          borderColor: C.border
+        }}
+      >
+        <MapView
+          ref={map}
+          style={{ flex: 1 }}
+          initialRegion={region}
+          zoomEnabled
+          zoomControlEnabled
+          onPress={event => {
+            if (event.nativeEvent.action === 'marker-press') return;
+            const { latitude, longitude } = event.nativeEvent.coordinate;
+            setMapCenter({ latitude, longitude, name: 'Selected map pin', isManual: true });
+          }}
+        >
+          <Marker coordinate={mapCenter} title={mapCenter.name} pinColor={C.green} />
+          <Circle
+            center={mapCenter}
+            radius={radius * 1609.344}
+            strokeColor={C.green}
+            fillColor="rgba(23,107,85,0.08)"
+          />
+          {posts.map(post => (
+            <Marker
+              key={post.id}
+              coordinate={{ latitude: post.latitude, longitude: post.longitude }}
+              title={post.title || 'Activity'}
+              description={post.place_name}
+              onPress={event => event.stopPropagation()}
+              onCalloutPress={() => onPost(post.id)}
+            />
+          ))}
+        </MapView>
+      </View>
+      <Muted>Tap the map to adjust your search location.</Muted>
+      {loading ? <Loading label="Finding activities…" /> : <Muted style={{ marginTop: 10 }}>{posts.length} activities within {radius} mi</Muted>}
+      <ErrorText message={error} />
+      <Btn label="Explore this area →" onPress={() => onSelect(mapCenter, radius)} />
+    </Layout>
+  );
 }
