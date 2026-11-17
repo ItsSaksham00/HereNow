@@ -3,7 +3,6 @@ import { Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, Text, View 
 import { uuid } from 'expo';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { Location as PlaceLocation } from 'expo-location/next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker } from 'react-native-maps';
 import { ApiError, api, photoForm, Post, PostSuggestions } from '../lib/api';
@@ -89,9 +88,9 @@ export function CreatePostScreen({ center, onPosted }: { center: Center; onPoste
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const latitude = Number(position.coords.latitude.toFixed(3));
       const longitude = Number(position.coords.longitude.toFixed(3));
-      const addresses = await PlaceLocation.reverseGeocode({ latitude, longitude }).catch(() => []);
+      const addresses = await Location.reverseGeocodeAsync({ latitude, longitude }).catch(() => []);
       const address = addresses[0];
-      const name = address?.formattedAddress || address?.name || 'Near my location';
+      const name = address?.formattedAddress || [address?.name, address?.city || address?.district].filter(Boolean).join(', ') || 'Near my location';
       setLocation({ latitude, longitude, name });
       setForm(current => ({ ...current, placeName: name }));
       setConfirmed(false);

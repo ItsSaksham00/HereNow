@@ -1,20 +1,38 @@
 import React, { useRef, useState } from 'react';
-import { Keyboard, Pressable, Text, TextInput, View } from 'react-native';
-import { Location } from 'expo-location/next';
+import { Keyboard, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import * as Location from 'expo-location';
 import type { Center } from '../screens/LocationScreen';
 import { Btn, ErrorText, Muted, styles } from './ui';
 import { C } from '../theme/theme';
 
-// Looks up real places through the device geocoder without requesting GPS access.
+// Looks up real places with the stable geocoder and its required Android permission.
 export async function findLocations(query: string): Promise<Center[]> {
   const text = query.trim();
   if (!text) throw new Error('Enter a place, city, or address.');
-  const addresses = await Location.geocode(text);
+  if (Platform.OS === 'android') {
+    let permission = await Location.getForegroundPermissionsAsync();
+    if (!permission.granted && permission.canAskAgain) {
+      permission = await Location.requestForegroundPermissionsAsync();
+    }
+    if (!permission.granted) {
+      throw new Error('Android requires location permission for address search. Enable it in Settings or choose a pin on the map.');
+    }
+  }
+
+  let matches;
+  try {
+    matches = await Location.geocodeAsync(text);
+  } catch {
+    throw new Error('Location search is unavailable. Check your connection or choose a pin on the map.');
+  }
   const results: Center[] = [];
-  for (const address of addresses) {
-    const { latitude, longitude } = address.coordinates;
+  for (const match of matches) {
+    const { latitude, longitude } = match;
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) continue;
-    results.push({ latitude, longitude, name: address.formattedAddress || address.name || address.city || text, isManual: true });
+    const addresses = await Location.reverseGeocodeAsync({ latitude, longitude }).catch(() => []);
+    const address = addresses[0];
+    const name = address?.formattedAddress || [address?.name, address?.city || address?.district, address?.region].filter(Boolean).join(', ') || text;
+    results.push({ latitude, longitude, name, isManual: true });
   }
   return results;
 }
@@ -40,8 +58,8 @@ export function LocationSearch({ onSelect, disabled = false }: { onSelect: (loca
       const matches = await findLocations(query);
       setResults(matches);
       if (!matches.length) setError('No places found. Try a fuller address or choose a pin on the map.');
-    } catch {
-      setError('Location search is unavailable. Check your connection or choose a pin on the map.');
+    } catch (error: any) {
+      setError(error.message || 'Location search is unavailable. Choose a pin on the map instead.');
     } finally {
       pending.current = false;
       setBusy(false);
