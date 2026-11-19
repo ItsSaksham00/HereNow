@@ -99,67 +99,21 @@ test('API transport failures and server validation errors provide retryable mess
   await assert.rejects(api('/posts'), error => error.status === 400 && error.message === 'Title is required');
 });
 
-test('stable iOS geocoding preserves real coordinates and names without requesting GPS', async () => {
-  const location = {
-    geocodeAsync: async query => { assert.equal(query, 'Youngstown'); return [{ latitude: 41.1, longitude: -80.6 }]; },
-    reverseGeocodeAsync: async () => [{ name: 'Downtown', city: 'Youngstown', region: 'OH' }],
-  };
+test('typed location lookup uses only the authenticated backend and never requests GPS', async () => {
+  let called = false;
   const { findLocations } = load('apps/mobile/src/components/LocationSearch.tsx', {
-    react: {}, 'react-native': { Platform: { OS: 'ios' } }, 'expo-location': location, './ui': {}, '../theme/theme': {},
+    react: {}, 'react-native': {}, '../lib/api': { api: async (url, options) => {
+      called = true;
+      assert.equal(url, '/locations/autocomplete?q=New%20York');
+      assert.ok('signal' in options);
+      return [{ id: 'place-1', latitude: 40.7, longitude: -74, name: 'New York', primary: 'New York', secondary: 'United States', source: 'geoapify' }];
+    } }, './ui': {}, '../theme/theme': {},
   });
-  const matches = await findLocations('  Youngstown  ');
-  assert.equal(matches[0].latitude, 41.1);
-  assert.equal(matches[0].longitude, -80.6);
-  assert.equal(matches[0].name, 'Downtown, Youngstown, OH');
-});
-
-test('failed stable lookups never fabricate or fall back to unrelated coordinates', async () => {
-  for (const geocodeAsync of [async () => [], async () => [{ latitude: NaN, longitude: 0 }], async () => { throw new Error('offline'); }]) {
-    const { findLocations } = load('apps/mobile/src/components/LocationSearch.tsx', { react: {}, 'react-native': { Platform: { OS: 'ios' } }, 'expo-location': { geocodeAsync }, './ui': {}, '../theme/theme': {} });
-    try { assert.equal((await findLocations('No such place')).length, 0); }
-    catch (error) { assert.match(error.message, /Location search is unavailable/); }
-  }
-});
-
-test('Android obtains foreground permission before geocoding and uses readable address results', async () => {
-  const calls = [];
-  const location = {
-    getForegroundPermissionsAsync: async () => { calls.push('check'); return { granted: false, canAskAgain: true }; },
-    requestForegroundPermissionsAsync: async () => { calls.push('request'); return { granted: true }; },
-    geocodeAsync: async () => { calls.push('geocode'); return [{ latitude: 41, longitude: -80 }]; },
-    reverseGeocodeAsync: async () => [{ formattedAddress: 'Cafe, Youngstown, OH' }],
-  };
-  const { findLocations } = load('apps/mobile/src/components/LocationSearch.tsx', { react: {}, 'react-native': { Platform: { OS: 'android' } }, 'expo-location': location, './ui': {}, '../theme/theme': {} });
-  const matches = await findLocations('Cafe');
-  assert.deepEqual(calls, ['check', 'request', 'geocode']);
-  assert.equal(matches[0].name, 'Cafe, Youngstown, OH');
-});
-
-test('Android permission denial stops geocoding and explains the manual map alternative', async () => {
-  for (const canAskAgain of [true, false]) {
-    let requests = 0;
-    const location = {
-      getForegroundPermissionsAsync: async () => ({ granted: false, canAskAgain }),
-      requestForegroundPermissionsAsync: async () => { requests++; return { granted: false }; },
-      geocodeAsync: async () => { throw new Error('Geocoding must not run without permission'); },
-    };
-    const { findLocations } = load('apps/mobile/src/components/LocationSearch.tsx', { react: {}, 'react-native': { Platform: { OS: 'android' } }, 'expo-location': location, './ui': {}, '../theme/theme': {} });
-    await assert.rejects(findLocations('Cafe'), /Android requires location permission.*pin on the map/);
-    assert.equal(requests, canAskAgain ? 1 : 0);
-  }
-});
-
-test('already-granted Android permission is reused and reverse-geocoder failures keep the actual match', async () => {
-  const location = {
-    getForegroundPermissionsAsync: async () => ({ granted: true }),
-    geocodeAsync: async () => [{ latitude: 41, longitude: -80 }],
-    reverseGeocodeAsync: async () => { throw new Error('offline'); },
-  };
-  const { findLocations } = load('apps/mobile/src/components/LocationSearch.tsx', { react: {}, 'react-native': { Platform: { OS: 'android' } }, 'expo-location': location, './ui': {}, '../theme/theme': {} });
-  const matches = await findLocations('Cafe');
-  assert.equal(matches[0].name, 'Cafe');
-  assert.equal(matches[0].latitude, 41);
-  assert.equal(matches[0].longitude, -80);
+  assert.equal((await findLocations('  New York  '))[0].latitude, 40.7);
+  assert.equal(called, true);
+  called = false;
+  assert.equal((await findLocations('NY')).length, 0);
+  assert.equal(called, false);
 });
 
 test('mobile application imports never load the beta location module', () => {

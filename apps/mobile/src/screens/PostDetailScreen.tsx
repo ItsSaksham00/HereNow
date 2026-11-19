@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { api, Comment, CommentPage, formatActivityTime, Post, timeAgo } from '../lib/api';
 import { Btn, ErrorText, IconButton, LabelChip, Loading, Muted, Title } from '../components/ui';
 import { C } from '../theme/theme';
+import { LocationCredits } from '../components/LocationSearch';
 
 // Shows an activity and the actions available to the current user.
-export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => void }) {
+export function PostDetailScreen({ id, onBack, onEdit }: { id: string; onBack: () => void; onEdit?: (id: string) => void }) {
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -14,10 +15,12 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
   const [commentsError, setCommentsError] = useState<string | null>(null);
   const [comment, setComment] = useState('');
   const [commentNotice, setCommentNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [action, setAction] = useState<'interest' | 'comment' | 'analyze' | 'publish' | null>(null);
+  const busy = action !== null;
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const commentsPending = useRef(false);
+  const loadVersion = useRef(0);
   const commentRequest = useRef<{ body: string; id: string } | null>(null);
 
   // Loads a page of comments and the full count without blocking the activity details.
@@ -44,25 +47,30 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
 
   // Loads the activity first, then retrieves its public conversation separately.
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError(null);
     try {
       const loadedPost = await api<Post>(`/posts/${id}`);
+      if (version !== loadVersion.current) return;
       setPost(loadedPost);
       if (loadedPost.status === 'PUBLISHED') await loadComments();
     } catch (error: any) {
-      setError(error.message);
+      if (version === loadVersion.current) {
+        if (error.status === 404) setPost(null);
+        setError(error.message);
+      }
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, [id, loadComments]);
   useEffect(() => { void load(); }, [load]);
 
-  // Sends interest in this activity and refreshes its details.
+  // Sends interest and reloads the activity’s count and viewer state.
   async function join() {
     if (pending.current) return;
     pending.current = true;
-    setBusy(true);
+    setAction('interest');
     setError(null);
     try {
       await api(`/interests/${id}`, { method: 'POST' });
@@ -72,7 +80,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
       setError(error.message);
     } finally {
       pending.current = false;
-      setBusy(false);
+      setAction(null);
     }
   }
 
@@ -85,7 +93,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
       commentRequest.current = { body, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` };
     }
     pending.current = true;
-    setBusy(true);
+    setAction('comment');
     setCommentsError(null);
     setCommentNotice(null);
     try {
@@ -98,7 +106,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
       setCommentsError(error.message);
     } finally {
       pending.current = false;
-      setBusy(false);
+      setAction(null);
     }
   }
 
@@ -106,7 +114,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
   async function retry() {
     if (pending.current) return;
     pending.current = true;
-    setBusy(true);
+    setAction('analyze');
     setError(null);
     try {
       await api(`/posts/${id}/analyze`, { method: 'POST' });
@@ -115,7 +123,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
       setError(error.message);
     } finally {
       pending.current = false;
-      setBusy(false);
+      setAction(null);
     }
   }
 
@@ -123,7 +131,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
   async function publish() {
     if (pending.current) return;
     pending.current = true;
-    setBusy(true);
+    setAction('publish');
     setError(null);
     try {
       await api(`/posts/${id}/publish`, { method: 'POST' });
@@ -132,7 +140,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
       setError(error.message);
     } finally {
       pending.current = false;
-      setBusy(false);
+      setAction(null);
     }
   }
   return (
@@ -143,6 +151,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
       <ScrollView
         contentContainerStyle={{ padding: 20, paddingBottom: 45 }}
         keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { if (!pending.current) void load(); }} tintColor={C.green} />}
       >
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <IconButton name="chevron-back" onPress={onBack} />
@@ -173,17 +182,20 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
             </Text>
             <Text style={{ marginTop: 22, color: C.ink, fontWeight: '700' }}>📍 {post.place_name}
             </Text>
+            <LocationCredits />
             <Muted style={{ marginTop: 9 }}>🕒 {formatActivityTime(post.activity_at)}</Muted>
             <Muted style={{ marginTop: 6 }}>
               {post.status === 'PUBLISHED' ? 'Confirm current details with the creator.' : `Status: ${post.status}`}
             </Muted>
+            {post.isOwn && post.status !== 'ANALYZING' && onEdit ? <Btn label="Edit activity" secondary disabled={busy} onPress={() => onEdit(post.id)} /> : null}
             {post.isOwn && post.status === 'FAILED'
-              ? <Btn label={busy ? 'Retrying…' : 'Retry AI analysis'} onPress={retry} disabled={busy} />
+              ? <Btn label={action === 'analyze' ? 'Retrying…' : 'Retry AI analysis'} onPress={retry} disabled={busy} />
               : null}
             {post.isOwn && post.status === 'READY' ? <Btn label="Confirm and publish" onPress={publish} disabled={busy} /> : null}
+            {post.isOwn ? <Muted style={{ color: C.green, marginTop: 14 }}>{post.interestCount} interested</Muted> : null}
             {!post.isOwn && post.status === 'PUBLISHED' ? (
               <Btn
-                label={post.interested ? '✓ Interest already sent' : busy ? 'Sending…' : 'Let’s Go →'}
+                label={post.interested ? `Interested ✓ · ${post.interestCount}` : action === 'interest' ? `Sending… · ${post.interestCount}` : `Let’s Go · ${post.interestCount}`}
                 disabled={busy || post.interested}
                 onPress={join}
                 lime
@@ -242,7 +254,7 @@ export function PostDetailScreen({ id, onBack }: { id: string; onBack: () => voi
                   }}
                 />
                 <Btn
-                  label={busy ? 'Posting…' : 'Post comment'}
+                  label={action === 'comment' ? 'Posting…' : 'Post comment'}
                   onPress={addComment}
                   disabled={busy || commentsLoading || !comment.trim()}
                 />

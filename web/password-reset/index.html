@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="Content-Security-Policy" content="__CSP__">
+  <title>Reset your password · HereNow</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./page.js"></script>
+</head>
+<body>
+  <main>
+    <p class="brand">Here<span>Now</span><b>.</b></p>
+    <h1>Reset your password.</h1>
+    <p id="status" role="status" aria-live="polite">Checking your recovery link…</p>
+    <form id="request-form" hidden>
+      <label for="email">Account email</label>
+      <input id="email" name="email" type="email" autocomplete="email" autocapitalize="none" required>
+      <button id="send" type="submit">Send Reset Link</button>
+    </form>
+    <form id="reset-form" hidden>
+      <label for="password">New Password</label>
+      <input id="password" name="new-password" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" minlength="6" required>
+      <label for="confirmation">Confirm Password</label>
+      <input id="confirmation" name="confirm-password" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" minlength="6" required>
+      <button id="show-passwords" class="secondary" type="button">Show passwords</button>
+      <button id="submit" type="submit">Update Password</button>
+    </form>
+    <p id="error" role="alert"></p>
+    <button id="finish" type="button" hidden>Finish and return to HereNow</button>
+    <p class="note">Use the link in your latest password-reset email. Return to the HereNow app to request another link.</p>
+    <noscript>Enable JavaScript to securely reset your password.</noscript>
+  </main>
+</body>
+</html>

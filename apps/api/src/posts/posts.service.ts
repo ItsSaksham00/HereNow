@@ -1,14 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { SupabaseService } from '../common/supabase.service';
-import { CreatePostDto, NearbyQuery } from '../common/dtos';
+import { CreatePostDto, EditPostDto, MyPostsQuery, NearbyQuery } from '../common/dtos';
 import OpenAI from 'openai';
 import { randomUUID } from 'node:crypto';
+
+type InterestSummary = { post_id: string; interest_count: number | string; interested: boolean };
 
 @Injectable()
 export class PostsService {
   constructor(private readonly db: SupabaseService) {}
 
-  // Adds creator names, photo URLs, and viewer details to posts.
+  // Adds creator names, photo URLs, and interest totals for the current viewer.
   private async enrich(rows: any[], viewerId: string) {
     if (!rows.length) return [];
     const creatorIds = [...new Set(rows.map(post => post.creator_id))];
@@ -19,9 +21,12 @@ export class PostsService {
     const { data: media, error: mediaError } = await this.db.client.from('media_assets').select('post_id,object_key').in('post_id', postIds);
     this.db.check(mediaError);
     const mediaKeys = new Map((media || []).map(asset => [asset.post_id, asset.object_key]));
-    const { data: interests, error: interestError } = await this.db.client.from('interests').select('post_id').eq('user_id', viewerId).in('post_id', postIds);
+    const { data: interests, error: interestError } = await this.db.client.rpc('post_interest_summary', {
+      p_posts: postIds, p_viewer: viewerId,
+    });
     this.db.check(interestError);
-    const interestedPostIds = new Set((interests || []).map(interest => interest.post_id));
+    const summaries = (interests || []) as InterestSummary[];
+    const interestByPost = new Map(summaries.map(interest => [interest.post_id, interest]));
     return Promise.all(rows.map(async post => {
       const objectKey = mediaKeys.get(post.id);
       let imageUrl: string | null = null;
@@ -33,7 +38,8 @@ export class PostsService {
         ...post,
         imageUrl,
         creatorName: creatorNames.get(post.creator_id) || 'HereNow member',
-        interested: interestedPostIds.has(post.id),
+        interested: interestByPost.get(post.id)?.interested || false,
+        interestCount: Number(interestByPost.get(post.id)?.interest_count || 0),
         isOwn: post.creator_id === viewerId
       };
     }));
@@ -56,13 +62,18 @@ export class PostsService {
   }
 
   // Lists the posts created by this user.
-  async myPosts(userId: string) {
-    const { data, error } = await this.db.client
-      .from('posts')
-      .select('*')
-      .eq('creator_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(40);
+  async myPosts(userId: string, options: MyPostsQuery = new MyPostsQuery()) {
+    let query = this.db.client.from('posts').select('*').eq('creator_id', userId);
+    const now = new Date().toISOString();
+    if (options.filter === 'active' || options.filter === 'upcoming') {
+      query = query.eq('status', 'PUBLISHED').gt('expires_at', now);
+      if (options.filter === 'upcoming') query = query.gt('activity_at', now);
+      else query = query.lte('activity_at', now);
+    } else if (options.filter === 'expired') {
+      query = query.or(`status.eq.EXPIRED,expires_at.lte.${now}`);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false })
+      .order('id', { ascending: false }).range(options.offset, options.offset + options.limit - 1);
     this.db.check(error);
     return this.enrich(data || [], userId);
   }
@@ -386,21 +397,74 @@ export class PostsService {
     return this.post(userId, id);
   }
 
+  // Updates only owner-editable fields and recalculates expiration only when the time changes.
+  async update(userId: string, id: string, body: EditPostDto) {
+    const { data: post, error } = await this.db.client.from('posts').select('*').eq('id', id).maybeSingle();
+    this.db.check(error);
+    if (!post) throw new NotFoundException('Activity not found');
+    if (post.creator_id !== userId) throw new ForbiddenException();
+    if (post.status === 'ANALYZING') throw new ConflictException('Wait for photo analysis before editing this activity');
+
+    const changes: Record<string, unknown> = {
+      title: body.title.trim(), description: body.description.trim(), category: body.category,
+      place_name: body.placeName.trim(), latitude: body.latitude, longitude: body.longitude,
+      activity_at: body.activityAt,
+    };
+    const timeChanged = new Date(body.activityAt).getTime() !== new Date(post.activity_at).getTime();
+    if (timeChanged) {
+      const expiresAt = this.activityExpiration(body.activityAt);
+      if (post.published_at) {
+        changes.expires_at = expiresAt;
+        if (post.status === 'EXPIRED') changes.status = 'PUBLISHED';
+      }
+    }
+    let update = this.db.client.from('posts').update(changes)
+      .eq('id', id).eq('creator_id', userId).eq('status', post.status);
+    // Avoid pairing a stale start time with a deadline from another edit.
+    if (post.activity_at == null) update = update.is('activity_at', null);
+    else update = update.eq('activity_at', post.activity_at);
+    const result = await update.select('id').maybeSingle();
+    this.db.check(result.error);
+    if (!result.data) throw new ConflictException('This activity changed or was deleted. Refresh and try again.');
+    return this.post(userId, id);
+  }
+
   // Deletes an owned activity and removes its stored photo.
   async delete(userId: string, id: string) {
-    const { data: post, error } = await this.db.client.from('posts').select('creator_id').eq('id', id).single();
-    this.db.check(error);
+    const { data: post, error } = await this.db.client.from('posts').select('creator_id').eq('id', id).maybeSingle();
     this.db.check(error);
     if (!post) {
-      throw new NotFoundException('Activity not found');
+      await this.removeDeletedPhotos(userId, id);
+      return { deleted: true };
     }
     if (post.creator_id !== userId) {
       throw new ForbiddenException();
     }
-    const { data: media } = await this.db.client.from('media_assets').select('object_key').eq('post_id', id).maybeSingle();
-    const result = await this.db.client.from('posts').delete().eq('id', id);
+    const { data: media, error: mediaError } = await this.db.client.from('media_assets').select('object_key').eq('post_id', id).maybeSingle();
+    this.db.check(mediaError);
+    const result = await this.db.client.from('posts').delete().eq('id', id).eq('creator_id', userId);
     this.db.check(result.error);
-    if (media?.object_key) await this.db.client.storage.from('post-images').remove([media.object_key]);
+    if (media?.object_key) {
+      const cleanup = await this.db.client.storage.from('post-images').remove([media.object_key]);
+      if (cleanup.error) throw new ServiceUnavailableException('Activity deleted, but photo cleanup failed. Retry deleting to finish.');
+    }
     return { deleted: true };
+  }
+
+  // Finishes a failed deletion using only the authenticated owner's activity folder.
+  private async removeDeletedPhotos(userId: string, id: string) {
+    const prefix = `${userId}/${id}`;
+    const bucket = this.db.client.storage.from('post-images');
+    while (true) {
+      const { data: photos, error } = await bucket.list(prefix, { limit: 100 });
+      if (error) throw new ServiceUnavailableException('Could not finish photo cleanup. Retry deleting.');
+      if (!photos?.length) return;
+      if (photos.some(photo => !photo.id || photo.name.includes('/'))) {
+        throw new ServiceUnavailableException('Photo cleanup needs review. No other folders were changed.');
+      }
+      const keys = photos.map(photo => `${prefix}/${photo.name}`);
+      const cleanup = await bucket.remove(keys);
+      if (cleanup.error) throw new ServiceUnavailableException('Could not finish photo cleanup. Retry deleting.');
+    }
   }
 }

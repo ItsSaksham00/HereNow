@@ -18,3 +18,7 @@ build/
 
 # Logs
 *.log
+
+#extra file
+docs/
+assignment-testing/

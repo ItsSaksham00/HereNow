@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import { Btn, ErrorText, Layout, Muted, Title } from '../components/ui';
 import { C } from '../theme/theme';
 
-export type Center = { latitude: number; longitude: number; name: string; isManual?: boolean };
+export type Center = { latitude: number; longitude: number; name: string; isManual?: boolean; source?: 'geoapify' };
 export const sampleCenter: Center = {
   latitude: 41.0998,
   longitude: -80.6495,
@@ -12,15 +12,56 @@ export const sampleCenter: Center = {
   isManual: true
 };
 
-// Requests location access and returns the current search center.
+// Reads current GPS coordinates with a bounded wait and an optional readable address.
 export async function getDeviceCenter(): Promise<Center> {
-  const permission = await Location.requestForegroundPermissionsAsync();
-  if (permission.status !== 'granted') throw new Error('Location permission was denied. Choose an area manually instead.');
-  const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+  let permission = await Location.getForegroundPermissionsAsync();
+  if (!permission.granted && permission.canAskAgain) {
+    const agreed = await new Promise<boolean>(resolve => Alert.alert(
+      'Use your current location?',
+      'HereNow uses your location to find nearby activities. It is not shown as a public user pin.',
+      [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) }, { text: 'Continue', onPress: () => resolve(true) }],
+      { cancelable: true, onDismiss: () => resolve(false) }
+    ));
+    if (!agreed) throw new Error('Location selection was cancelled. Your previous area is unchanged.');
+    permission = await Location.requestForegroundPermissionsAsync();
+  }
+  if (!permission.granted) throw new Error('Location permission was denied. Enable it in Settings, or select an area manually.');
+  if (!await Location.hasServicesEnabledAsync()) throw new Error('Location Services are off. Turn them on and try again.');
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let position: Location.LocationObject;
+  try {
+    position = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Finding your location timed out. Try again or select an area manually.')), 20000); }),
+    ]);
+  } catch (error: any) {
+    throw new Error(error.message?.includes('timed out') ? error.message : 'Your current location is unavailable. Try again or select an area manually.');
+  } finally {
+    clearTimeout(timer);
+  }
+  const { latitude, longitude } = position.coords;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    throw new Error('Your current location is unavailable. Select an area manually.');
+  }
+
+  let addresses: Location.LocationGeocodedAddress[] = [];
+  try {
+    addresses = await Promise.race([
+      Location.reverseGeocodeAsync({ latitude, longitude }),
+      new Promise<Location.LocationGeocodedAddress[]>(resolve => { timer = setTimeout(() => resolve([]), 3000); }),
+    ]);
+  } catch {
+    // A failed address lookup must not discard a valid GPS location.
+  } finally {
+    clearTimeout(timer);
+  }
+  const address = addresses[0];
+  const name = address?.formattedAddress || [address?.name, address?.city || address?.district, address?.region].filter(Boolean).join(', ') || 'Near you';
   return {
-    latitude: position.coords.latitude,
-    longitude: position.coords.longitude,
-    name: 'Near you',
+    latitude,
+    longitude,
+    name,
     isManual: false
   };
 }

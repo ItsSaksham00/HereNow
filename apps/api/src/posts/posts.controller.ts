@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { PostsService } from './posts.service';
-import { CreatePostDto, NearbyQuery } from '../common/dtos';
+import { CreatePostDto, EditPostDto, MyPostsQuery, NearbyQuery } from '../common/dtos';
 import type { AuthRequest } from '../auth/auth.guard';
 
 @Controller('posts')
@@ -17,8 +17,8 @@ export class PostsController {
 
   // Returns the signed-in user’s posts.
   @Get('mine')
-  mine(@Req() request: AuthRequest) {
-    return this.posts.myPosts(request.userId);
+  mine(@Req() request: AuthRequest, @Query() query: MyPostsQuery) {
+    return this.posts.myPosts(request.userId, query);
   }
 
   // Returns the requested activity.
@@ -51,6 +51,12 @@ export class PostsController {
   @Post(':id/publish')
   publish(@Req() request: AuthRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.posts.publish(request.userId, id);
+  }
+
+  // Saves editable details without replacing the activity photo or social records.
+  @Patch(':id')
+  update(@Req() request: AuthRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: EditPostDto) {
+    return this.posts.update(request.userId, id, body);
   }
 
   // Deletes an activity owned by the signed-in user.

@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
-import { api } from './src/lib/api';
+import { ActivityFilter, api } from './src/lib/api';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { Center, LocationScreen } from './src/screens/LocationScreen';
 import { FeedScreen } from './src/screens/FeedScreen';
@@ -12,6 +12,7 @@ import { MapScreen } from './src/screens/MapScreen';
 import { PostDetailScreen } from './src/screens/PostDetailScreen';
 import { CreatePostScreen } from './src/screens/CreatePostScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
+import { EditPostScreen } from './src/screens/EditPostScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { C } from './src/theme/theme';
 import { initialWindowMetrics, SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -44,9 +45,13 @@ type Tab = 'feed' | 'create' | 'activity' | 'profile';
 function SignedIn() {
   const [center, setCenter] = useState<Center | null>(null);
   const [tab, setTab] = useState<Tab>('feed');
+  const [editId, setEditId] = useState<string | null>(null);
   const [postId, setPostId] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [radius, setRadius] = useState(10);
+  const [category, setCategory] = useState('All');
+  const [time, setTime] = useState<ActivityFilter>('now');
+  const [search, setSearch] = useState('');
   if (!center) return <LocationScreen onSelected={setCenter} />;
 
   // Opens an activity and closes the map.
@@ -55,9 +60,15 @@ function SignedIn() {
     setShowMap(false);
   };
   let content: React.ReactNode;
-  if (postId) content = <PostDetailScreen key={postId} id={postId} onBack={() => setPostId(null)} />;
+  if (editId) content = <EditPostScreen key={editId} id={editId} onBack={() => setEditId(null)} onSaved={id => { setEditId(null); setPostId(id); }} />;
+  else if (postId) content = <PostDetailScreen key={postId} id={postId} onEdit={setEditId} onBack={() => setPostId(null)} />;
   else if (showMap) content = <MapScreen
     center={center}
+    onCenterChange={setCenter}
+    category={category}
+    time={time}
+    onTimeChange={setTime}
+    search={search}
     radius={radius}
     onRadiusChange={setRadius}
     onBack={() => setShowMap(false)}
@@ -70,6 +81,12 @@ function SignedIn() {
     }} />;
   else if (tab === 'feed') content = <FeedScreen
     center={center}
+    category={category}
+    onCategoryChange={setCategory}
+    time={time}
+    onTimeChange={setTime}
+    search={search}
+    onSearchChange={setSearch}
     radius={radius}
     onRadiusChange={setRadius}
     onMap={() => setShowMap(true)}
@@ -78,13 +95,13 @@ function SignedIn() {
   />;
   else if (tab === 'create') content = <CreatePostScreen center={center} onPosted={openPost} />;
   else if (tab === 'activity') content = <ActivityScreen onPost={openPost} />;
-  else content = <ProfileScreen onPost={openPost} onChangeLocation={() => setCenter(null)} />;
+  else content = <ProfileScreen onEdit={setEditId} onPost={openPost} onChangeLocation={() => setCenter(null)} />;
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
       <View style={{ flex: 1 }}>
         {content}
       </View>
-      {!postId && !showMap ? (
+      {!postId && !editId && !showMap ? (
         <View style={styles.nav}>
           {([
             ['feed', 'home-outline', 'Nearby'], ['create', 'add-circle-outline', 'Post'], ['activity', 'notifications-outline', 'Activity'], ['profile', 'person-outline', 'Profile']

@@ -1,103 +1,127 @@
-import React, { useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, Text, TextInput, View } from 'react-native';
-import * as Location from 'expo-location';
+import React, { useEffect, useRef, useState } from 'react';
+import { Keyboard, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { Center } from '../screens/LocationScreen';
-import { Btn, ErrorText, Muted, styles } from './ui';
+import { api } from '../lib/api';
+import { ErrorText, Muted, styles } from './ui';
 import { C } from '../theme/theme';
 
-// Looks up real places with the stable geocoder and its required Android permission.
-export async function findLocations(query: string): Promise<Center[]> {
-  const text = query.trim();
-  if (!text) throw new Error('Enter a place, city, or address.');
-  if (Platform.OS === 'android') {
-    let permission = await Location.getForegroundPermissionsAsync();
-    if (!permission.granted && permission.canAskAgain) {
-      permission = await Location.requestForegroundPermissionsAsync();
-    }
-    if (!permission.granted) {
-      throw new Error('Android requires location permission for address search. Enable it in Settings or choose a pin on the map.');
-    }
-  }
+type Suggestion = Center & { id: string; primary: string; secondary: string; source: 'geoapify' };
 
-  let matches;
-  try {
-    matches = await Location.geocodeAsync(text);
-  } catch {
-    throw new Error('Location search is unavailable. Check your connection or choose a pin on the map.');
-  }
-  const results: Center[] = [];
-  for (const match of matches) {
-    const { latitude, longitude } = match;
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) continue;
-    const addresses = await Location.reverseGeocodeAsync({ latitude, longitude }).catch(() => []);
-    const address = addresses[0];
-    const name = address?.formattedAddress || [address?.name, address?.city || address?.district, address?.region].filter(Boolean).join(', ') || text;
-    results.push({ latitude, longitude, name, isManual: true });
-  }
-  return results;
+// Fetches provider suggestions through the authenticated backend, never through device GPS.
+export async function findLocations(query: string, signal?: AbortSignal): Promise<Suggestion[]> {
+  const text = query.trim();
+  if (text.length < 3) return [];
+  return api<Suggestion[]>(`/locations/autocomplete?q=${encodeURIComponent(text)}`, { signal });
 }
 
-// Offers search results only after an explicit search, keeping geocoder requests small.
-export function LocationSearch({ onSelect, disabled = false }: { onSelect: (location: Center) => void; disabled?: boolean }) {
+// Retains the provider and data-source attribution required for location search results.
+export function LocationCredits() {
+  return (
+    <Text style={{ color: C.muted, fontSize: 10, marginTop: 8 }}>
+      Location search: <Text accessibilityRole="link" onPress={() => { void Linking.openURL('https://www.geoapify.com/').catch(() => {}); }}>Geoapify</Text>
+      {' · '}<Text accessibilityRole="link" onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright').catch(() => {}); }}>© OpenStreetMap</Text>
+    </Text>
+  );
+}
+
+// Debounces typed search and keeps outdated responses out of the dropdown.
+export function LocationSearch({ onSelect, selected = null, disabled = false }: {
+  onSelect: (location: Center) => void;
+  selected?: Center | null;
+  disabled?: boolean;
+}) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Center[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [results, setResults] = useState<Suggestion[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pending = useRef(false);
+  const version = useRef(0);
+  const pending = useRef<AbortController | null>(null);
 
-  // Searches for the entered place and leaves the current selection unchanged on failure.
-  async function search() {
-    if (pending.current || disabled) return;
-    if (!query.trim()) { setError('Enter a place, city, or address.'); return; }
-    pending.current = true;
-    setBusy(true);
-    setError(null);
+  useEffect(() => {
+    version.current++;
+    pending.current?.abort();
+    setEditing(false);
+    setQuery(selected?.name || '');
     setResults([]);
-    Keyboard.dismiss();
-    try {
-      const matches = await findLocations(query);
-      setResults(matches);
-      if (!matches.length) setError('No places found. Try a fuller address or choose a pin on the map.');
-    } catch (error: any) {
-      setError(error.message || 'Location search is unavailable. Choose a pin on the map instead.');
-    } finally {
-      pending.current = false;
+    setBusy(false);
+    setError(null);
+  }, [selected?.latitude, selected?.longitude, selected?.name]);
+
+  useEffect(() => {
+    if (disabled) {
+      version.current++;
+      pending.current?.abort();
       setBusy(false);
+      setResults([]);
+      return;
     }
+    if (!editing || disabled || query.trim().length < 3) return;
+    const current = ++version.current;
+    const controller = new AbortController();
+    pending.current = controller;
+    const timer = setTimeout(async () => {
+      setBusy(true);
+      try {
+        const matches = await findLocations(query, controller.signal);
+        if (current !== version.current || controller.signal.aborted) return;
+        setResults(matches);
+        setError(matches.length ? null : 'No places found. Try a fuller address or select a pin.');
+      } catch (error: any) {
+        if (current === version.current && !controller.signal.aborted) setError(error.message || 'Location search is unavailable. Try again or select a pin.');
+      } finally {
+        if (current === version.current && !controller.signal.aborted) setBusy(false);
+      }
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [query, editing, disabled]);
+
+  // Cancels any older lookup as soon as the user edits or clears the field.
+  function changeQuery(value: string) {
+    version.current++;
+    pending.current?.abort();
+    setQuery(value);
+    setEditing(true);
+    setResults([]);
+    setError(null);
+    setBusy(false);
+  }
+
+  // Selects the suggestion's coordinates directly; map interaction is optional.
+  function selectSuggestion(result: Suggestion) {
+    version.current++;
+    pending.current?.abort();
+    setQuery(result.name);
+    setEditing(false);
+    setResults([]);
+    setError(null);
+    setBusy(false);
+    Keyboard.dismiss();
+    onSelect(result);
   }
 
   return (
-    <View>
+    <View style={{ marginBottom: 8 }}>
       <Text style={styles.fieldLabel}>Search location</Text>
-      <TextInput
-        value={query}
-        onChangeText={value => { setQuery(value); setResults([]); setError(null); }}
-        editable={!disabled && !busy}
-        onSubmitEditing={() => void search()}
-        returnKeyType="search"
-        placeholder="Address, city, or place"
-        placeholderTextColor={C.muted}
-        style={styles.input}
-      />
-      <Btn
-        label={busy ? 'Searching…' : 'Search'}
-        secondary
-        disabled={disabled || busy || !query.trim()}
-        onPress={search}
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TextInput value={query} maxLength={120} onChangeText={changeQuery} editable={!disabled} returnKeyType="search" placeholder="City, address, or place" placeholderTextColor={C.muted} style={[styles.input, { flex: 1 }]} />
+        {query ? <Pressable accessibilityRole="button" accessibilityLabel="Clear location search" disabled={disabled} onPress={() => changeQuery('')} style={{ padding: 12 }}><Text style={{ color: C.green, fontSize: 20 }}>×</Text></Pressable> : null}
+      </View>
+      {busy ? <Muted style={{ marginTop: 8 }}>Finding places…</Muted> : null}
+      {results.length ? (
+        <View style={{ backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden', marginTop: 4 }}>
+          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 240 }}>
+            {results.map(result => (
+              <Pressable key={result.id} disabled={disabled} accessibilityRole="button" onPress={() => selectSuggestion(result)} style={{ padding: 12, borderBottomWidth: 1, borderColor: C.border }}>
+                <Text style={{ color: C.ink, fontWeight: '600' }}>{result.primary}</Text>
+                {result.secondary ? <Muted>{result.secondary}</Muted> : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
       <ErrorText message={error} />
-      {results.map((result, index) => (
-        <Pressable
-          key={`${result.latitude}-${result.longitude}-${index}`}
-          disabled={disabled}
-          accessibilityRole="button"
-          onPress={() => { onSelect(result); setResults([]); setQuery(result.name); }}
-          style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: C.border }}
-        >
-          <Text style={{ color: C.ink, fontWeight: '600' }}>{result.name}</Text>
-          <Muted>Choose this place →</Muted>
-        </Pressable>
-      ))}
+      {results.length || selected?.source === 'geoapify' ? <LocationCredits /> : null}
     </View>
   );
 }
