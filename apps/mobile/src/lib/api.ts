@@ -14,7 +14,7 @@ export function photoForm(photo: ImagePickerAsset | null) {
   if (!photo) throw new Error('Add a photo first.');
   const file = photo.file || new File(photo.uri);
   if (file.size === 0) throw new Error('This photo is empty or unavailable. Please choose it again.');
-  if (file.size > 6 * 1024 * 1024) throw new Error('Choose a photo smaller than 6 MB.');
+  if (file.size >= 6 * 1024 * 1024) throw new Error('Choose a photo smaller than 6 MB.');
   const mime = file.type || photo.mimeType;
   if (!mime || !['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
     throw new Error('Choose a JPEG, PNG, or WebP photo.');
