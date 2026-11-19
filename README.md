@@ -5,6 +5,9 @@ Instructions For Testing:
 
 Run  npm.cmd install --save-dev jest ts-jest @types/jest in the root folder in either \apps\mobile or \apps\api depending which file you want to test. 
 
+
+
+
 **Project:** HereNow — *See what’s happening around you. Right now.*
 
 **Stack:** React Native + TypeScript (Expo SDK 58), NestJS + TypeScript, Supabase Auth, Supabase PostgreSQL, private Supabase Storage, OpenAI vision. Same Git repository with two applications.
