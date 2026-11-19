@@ -13,7 +13,7 @@ export class UsersController {
     const { data: existingProfile, error: readError } = await this.db.client.from('profiles').select('*').eq('id', request.userId).maybeSingle();
     this.db.check(readError);
     if (existingProfile) return existingProfile;
-    const displayName = request.displayName.trim().slice(0, 60) || request.email.split('@')[0] || 'HereNow member';
+    const displayName = ( request.displayName.trim().slice(0, 60) || request.email.split('@')[0] || 'HereNow member').slice(0, 60);
     const { data, error } = await this.db.client
       .from('profiles')
       .upsert({ id: request.userId, display_name: displayName }, { onConflict: 'id' })
