@@ -1,6 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "types": ["jest"],
     "strict": true,
     "jsx": "react-jsx",
     "esModuleInterop": true
@@ -10,3 +11,4 @@
     "**/*.tsx"
   ]
 }
+
