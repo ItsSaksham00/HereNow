@@ -1,57 +1,78 @@
-# HereNow
+# README
 
-HereNow helps people find nearby activities, create posts, and connect through
-comments and the Let's Go interest button.
+**HereNow — Unit and Component Tests**
 
-## Technologies
+HereNow is a mobile application that allows users to create and discover activities happening nearby. The application uses React Native, Expo, NestJS, TypeScript, and Supabase.
 
-- React Native, Expo SDK 58, and TypeScript
-- NestJS and TypeScript
-- Supabase Authentication, PostgreSQL, and Storage
-- Jest and Node.js tests
+**Requirements:**
+- Node.js and npm
+- Visual Studio Code or another code editor
 
-## Installation
+**Installation (Windows and Mac):**
 
-Use Node.js 22.13 or newer and npm. From the repository root:
+1. Download or clone the HereNow project from the GitHub `testing` branch.
+2. Open the HereNow folder in VS Code.
+3. Open a terminal in the main project folder.
+4. Install the required dependencies:
 
-```sh
+```bash
 npm install
 ```
 
-## Configuration
+**Instructions for Testing:**
 
-Copy `apps/api/.env.example` to `apps/api/.env` and
-`apps/mobile/.env.example` to `apps/mobile/.env`.
+All commands below should be run from the main HereNow folder.
 
-Set the backend Supabase URL and service-role key. Set the mobile Supabase URL,
-public publishable key, and API URL. Keep private keys on the backend only.
-For a phone, use the computer's local network address for the API URL.
-Apply the numbered migrations in `supabase/` to your own Supabase project.
-The `Test*.Database.sql` files are separate tests, not migrations.
-Optional photo suggestions use `OPENAI_API_KEY`; place search uses
-`GEOAPIFY_API_KEY` in the backend environment.
+**For Windows (Command Prompt):**
 
-## Run the app
+Run all 18 assignment tests:
 
-From the repository root, start the backend:
-
-```sh
-npm run api
+```cmd
+node assignment-testing\run.cjs
 ```
 
-In a second terminal, start mobile and open it with compatible Expo Go:
+Run PhotoForm tests separately:
 
-```sh
-npm run mobile
+```cmd
+npx.cmd --no-install jest --config apps/mobile/jest.config.js --runInBand
 ```
 
-## Assignment 4 tests
+Run API tests separately:
 
-```sh
+```cmd
+npx.cmd --no-install jest --config apps/api/jest.config.js --runInBand
+```
+
+**For Mac (Terminal):**
+
+Run all 18 assignment tests:
+
+```bash
 node assignment-testing/run.cjs
 ```
 
-The suite runs 18 tests: 12 unit tests and 6 component tests.
-Unit tests check authentication, photo forms, activity input, and search radius.
-Component tests check publishing and nearby retrieval through real app modules.
-Tests use fake data and do not require production Supabase access.
+Run PhotoForm tests separately:
+
+```bash
+npx --no-install jest --config apps/mobile/jest.config.js --runInBand
+```
+
+Run API tests separately:
+
+```bash
+npx --no-install jest --config apps/api/jest.config.js --runInBand
+```
+
+**Expected Results:**
+
+| Test Suite | Expected Result |
+|---|---|
+| Assignment 4 Tests | 18 passed, 0 failed |
+| PhotoForm Tests | 3 passed, 0 failed |
+| API Tests | 3 passed, 0 failed |
+
+The assignment tests use fake data and do not require a live Supabase connection. The database SQL test scripts are not executed by these commands.
+
+**GitHub Repository:**
+
+https://github.com/ItsSaksham00/HereNow/tree/testing
