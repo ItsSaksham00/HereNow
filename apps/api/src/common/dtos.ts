@@ -1,5 +1,13 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+
+export class LocationSearchQuery {
+  @IsString()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @MinLength(3)
+  @MaxLength(120)
+  q!: string;
+}
 
 export class NearbyQuery {
   @Type(() => Number)
@@ -45,11 +53,7 @@ export class NearbyQuery {
   time: string = 'now';
 }
 
-export class CreatePostDto {
-  @IsOptional()
-  @IsUUID('4')
-  requestId?: string;
-
+export class EditPostDto {
   @Type(() => Number)
   @IsNumber()
   @Min(-90)
@@ -86,6 +90,12 @@ export class CreatePostDto {
   @IsDateString({ strict: true, strictSeparator: true }, { message: 'Choose a valid activity date and time' })
   @Matches(/(Z|[+-]\d{2}:\d{2})$/, { message: 'Activity time must include a timezone' })
   activityAt!: string;
+}
+
+export class CreatePostDto extends EditPostDto {
+  @IsOptional()
+  @IsUUID('4')
+  requestId?: string;
 
   @IsOptional()
   @IsArray()
@@ -95,14 +105,38 @@ export class CreatePostDto {
   labels?: string[];
 }
 
+export class MyPostsQuery {
+  @IsIn(['active', 'upcoming', 'expired', 'all'])
+  filter: string = 'all';
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset: number = 0;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(40)
+  limit: number = 40;
+}
+
 export class EditProfileDto {
   @IsString()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @MinLength(1)
   @MaxLength(60)
   displayName!: string;
 
   @IsOptional()
   @IsBoolean()
   pushEnabled?: boolean;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @MaxLength(300)
+  bio?: string;
 }
 
 export class AddCommentDto {

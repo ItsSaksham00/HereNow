@@ -1,0 +1,110 @@
+[
+  {
+    "id": "U1-01",
+    "target": "AuthGuard",
+    "purpose": "Accept a valid token",
+    "setup": "Mocked Auth returns user-123 and its profile fields"
+  },
+  {
+    "id": "U1-02",
+    "target": "AuthGuard",
+    "purpose": "Reject a missing token",
+    "setup": "Request headers contain no authorization token"
+  },
+  {
+    "id": "U1-03",
+    "target": "AuthGuard",
+    "purpose": "Reject an invalid session",
+    "setup": "Mocked Auth returns no user and an Invalid token error"
+  },
+  {
+    "id": "U2-01",
+    "target": "Photo form",
+    "purpose": "Accept a JPEG-typed file",
+    "setup": "2048-byte image/jpeg Blob; file:///event.jpg"
+  },
+  {
+    "id": "U2-02",
+    "target": "Photo form",
+    "purpose": "Reject an empty photo",
+    "setup": "Zero-byte image/jpeg Blob"
+  },
+  {
+    "id": "U2-03",
+    "target": "Photo form",
+    "purpose": "Accept the inclusive size limit",
+    "setup": "image/jpeg Blob; exactly 6 MiB (6,291,456 bytes)"
+  },
+  {
+    "id": "U3-01",
+    "target": "CreatePostDto",
+    "purpose": "Accept and normalize valid input",
+    "setup": "Study Group / Library; padded text; coordinate strings"
+  },
+  {
+    "id": "U3-02",
+    "target": "CreatePostDto",
+    "purpose": "Accept the title-length boundary",
+    "setup": "Otherwise valid form; title contains exactly 100 characters"
+  },
+  {
+    "id": "U3-03",
+    "target": "CreatePostDto",
+    "purpose": "Reject a blank required title",
+    "setup": "Otherwise valid form; title is three spaces"
+  },
+  {
+    "id": "U4-01",
+    "target": "NearbyQuery",
+    "purpose": "Accept typed discovery filters",
+    "setup": "41/-80; radius '5'; category Social; time upcoming"
+  },
+  {
+    "id": "U4-02",
+    "target": "NearbyQuery",
+    "purpose": "Accept the maximum radius",
+    "setup": "Valid coordinates; radius exactly 50 miles"
+  },
+  {
+    "id": "U4-03",
+    "target": "NearbyQuery",
+    "purpose": "Reject a radius above the limit",
+    "setup": "Valid coordinates; radius 50.01 miles"
+  },
+  {
+    "id": "C1-01",
+    "target": "Activity publishing",
+    "purpose": "Publish and enrich a saved post",
+    "setup": "Real controller/service; owned READY Study Group; saved photo; fake Supabase"
+  },
+  {
+    "id": "C1-02",
+    "target": "Activity publishing",
+    "purpose": "Handle a repeated request",
+    "setup": "Same controller/service; owned post already PUBLISHED"
+  },
+  {
+    "id": "C1-03",
+    "target": "Activity publishing",
+    "purpose": "Propagate an update failure",
+    "setup": "READY post; Supabase update returns a simulated error"
+  },
+  {
+    "id": "C2-01",
+    "target": "Nearby retrieval",
+    "purpose": "Forward filters and enrich results",
+    "setup": "Real validation pipe/DTO/controller/service; one future published activity; 2 interests"
+  },
+  {
+    "id": "C2-02",
+    "target": "Nearby retrieval",
+    "purpose": "Handle an empty feed efficiently",
+    "setup": "Filtered nearby RPC returns an empty array"
+  },
+  {
+    "id": "C2-03",
+    "target": "Nearby retrieval",
+    "purpose": "Reject a partial response on failure",
+    "setup": "Nearby RPC succeeds; interest-summary RPC returns a simulated error"
+  }
+]

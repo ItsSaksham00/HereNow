@@ -1,3 +1,4 @@
+import { describe, expect, jest, test } from '@jest/globals';
 
 jest.mock("./supabase", () => ({
   supabase: {
@@ -19,8 +20,8 @@ import { photoForm } from "./api";
 
 describe("photoForm Unit Tests", () => {
 
-  // TEST 1: Valid JPEG photo
-  test("accepts a valid JPEG photo", () => {
+  // Checks that a nonempty JPEG-typed file becomes a form part.
+  test("U2-01 accepts a valid JPEG photo", () => {
     const file = new Blob(
       [new Uint8Array(2048)],
       { type: "image/jpeg" }
@@ -36,10 +37,11 @@ describe("photoForm Unit Tests", () => {
 
     expect(actual).toBeInstanceOf(FormData);
     expect(actual.has("photo")).toBe(true);
+    console.log(JSON.stringify({ id: "U2-01", actual: actual.has("photo"), expected: true }));
   });
 
-  // TEST 2: Empty photo
-  test("rejects an empty photo", () => {
+  // Checks that an empty file is rejected.
+  test("U2-02 rejects an empty photo", () => {
     const file = new Blob([], {
       type: "image/jpeg",
     });
@@ -50,13 +52,18 @@ describe("photoForm Unit Tests", () => {
       mimeType: "image/jpeg",
     } as any;
 
-    expect(() => photoForm(photo)).toThrow(
-      "This photo is empty or unavailable. Please choose it again."
-    );
+    let message = "";
+    try {
+      photoForm(photo);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toBe("This photo is empty or unavailable. Please choose it again.");
+    console.log(JSON.stringify({ id: "U2-02", actual: message, expected: "This photo is empty or unavailable. Please choose it again." }));
   });
 
-  // TEST 3: Boundary condition - exactly 6 MB
-  test("rejects a photo exactly 6 MB in size", () => {
+  // Checks that the inclusive 6 MiB size limit is accepted.
+  test("U2-03 accepts a photo exactly 6 MiB in size", () => {
     const file = new Blob(
       [new Uint8Array(6 * 1024 * 1024)],
       { type: "image/jpeg" }
@@ -68,9 +75,12 @@ describe("photoForm Unit Tests", () => {
       mimeType: "image/jpeg",
     } as any;
 
-    expect(() => photoForm(photo)).toThrow(
-      "Choose a photo smaller than 6 MB."
-    );
+    const actual = photoForm(photo);
+
+    expect(actual).toBeInstanceOf(FormData);
+    const size = (actual.get("photo") as Blob).size;
+    expect(size).toBe(6 * 1024 * 1024);
+    console.log(JSON.stringify({ id: "U2-03", actual: size, expected: 6 * 1024 * 1024 }));
   });
 
 });

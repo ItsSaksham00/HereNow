@@ -18,3 +18,14 @@ build/
 
 # Logs
 *.log
+
+# Reports and screenshots stay local; only the assignment runner and tests are shared.
+docs/
+/assignment-testing/*
+!/assignment-testing/README.md
+!/assignment-testing/run.cjs
+!/assignment-testing/jest.config.cjs
+!/assignment-testing/cases.json
+!/assignment-testing/unit.test.cjs
+!/assignment-testing/components.test.cjs
+!/assignment-testing/fake-supabase.cjs

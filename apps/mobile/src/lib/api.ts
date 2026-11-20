@@ -32,6 +32,7 @@ export type Post = {
   creatorName: string;
   isOwn: boolean;
   interested: boolean;
+  interestCount: number;
   title: string | null;
   description: string | null;
   category: string | null;
@@ -63,12 +64,12 @@ export type Notification = { id: string; post_id: string; message: string; creat
 
 export type CommentPage = { comments: Comment[]; total: number };
 
-export type Profile = { id: string; display_name: string; push_enabled: boolean };
+export type Profile = { id: string; display_name: string; push_enabled: boolean; bio?: string; email: string; postCount: number };
 
 // Sends an authenticated API request and reads its JSON response.
 export async function api<T>(
   path: string,
-  options: { method?: string; body?: any; form?: FormData } = {}
+  options: { method?: string; body?: any; form?: FormData; signal?: AbortSignal } = {}
 ): Promise<T> {
   const { data, error } = await supabase.auth.getSession();
   if (error || !data.session) throw new Error('Sign in required');
@@ -76,6 +77,7 @@ export async function api<T>(
   let text;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
+      signal: options.signal,
       method: options.method || 'GET',
       headers: {
         Authorization: `Bearer ${data.session.access_token}`,
@@ -84,7 +86,8 @@ export async function api<T>(
       body: options.form || (options.body === undefined ? undefined : JSON.stringify(options.body)),
     });
     text = await response.text();
-  } catch {
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
     throw new ApiError('Could not upload or reach the server. Check your connection and retry.');
   }
   let parsed: any;

@@ -2,13 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import { uuid } from 'expo';
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker } from 'react-native-maps';
 import { ApiError, api, photoForm, Post, PostSuggestions } from '../lib/api';
 import { Btn, ErrorText, Field, Layout, Loading, Muted, Select, Title } from '../components/ui';
-import { LocationSearch } from '../components/LocationSearch';
-import { Center } from './LocationScreen';
+import { LocationCredits, LocationSearch } from '../components/LocationSearch';
+import { Center, getDeviceCenter } from './LocationScreen';
 import { C } from '../theme/theme';
 
 const categories = ['Food', 'Sports', 'Music', 'Outdoors', 'Social', 'Other'].map(value => ({ value, label: value }));
@@ -83,16 +82,11 @@ export function CreatePostScreen({ center, onPosted }: { center: Center; onPoste
     setAction('location');
     setError(null);
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== 'granted') throw new Error('Location access was denied. Search for a place or tap the map instead.');
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const latitude = Number(position.coords.latitude.toFixed(3));
-      const longitude = Number(position.coords.longitude.toFixed(3));
-      const addresses = await Location.reverseGeocodeAsync({ latitude, longitude }).catch(() => []);
-      const address = addresses[0];
-      const name = address?.formattedAddress || [address?.name, address?.city || address?.district].filter(Boolean).join(', ') || 'Near my location';
-      setLocation({ latitude, longitude, name });
-      setForm(current => ({ ...current, placeName: name }));
+      const device = await getDeviceCenter();
+      const latitude = Number(device.latitude.toFixed(3));
+      const longitude = Number(device.longitude.toFixed(3));
+      setLocation({ ...device, latitude, longitude });
+      setForm(current => ({ ...current, placeName: device.name }));
       setConfirmed(false);
     } catch (error: any) {
       setError(error.message);
@@ -223,6 +217,7 @@ export function CreatePostScreen({ center, onPosted }: { center: Center; onPoste
         />
         <Text style={{ color: C.ink, fontWeight: '700', marginTop: 12 }}>Location</Text>
         {confirmed && !locationOpen ? <Muted style={{ marginTop: 8 }}>📍 {form.placeName}</Muted> : null}
+        {confirmed && !locationOpen && location?.source === 'geoapify' ? <LocationCredits /> : null}
         <Btn
           label={confirmed ? 'Change location' : 'Choose a place'}
           secondary
@@ -231,7 +226,7 @@ export function CreatePostScreen({ center, onPosted }: { center: Center; onPoste
         />
         {locationOpen ? (
           <View style={{ marginTop: 16 }}>
-            <LocationSearch disabled={locked} onSelect={selectLocation} />
+            <LocationSearch selected={location} disabled={locked} onSelect={selectLocation} />
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
                 <Btn label="Current area" secondary disabled={locked} onPress={() => selectLocation(center)} />

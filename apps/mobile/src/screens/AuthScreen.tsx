@@ -1,20 +1,25 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { Layout, Title, Muted, Field, Btn, ErrorText } from '../components/ui';
 import { supabase } from '../lib/supabase';
+import { ForgotPasswordScreen } from './ForgotPasswordScreen';
 import { C } from '../theme/theme';
 
 // Shows the welcome, sign-in, and account creation forms.
-export function AuthScreen() {
-  const [mode, setMode] = useState<'welcome' | 'login' | 'signup'>('welcome');
+export function AuthScreen({ initialMode = 'welcome' }: { initialMode?: 'welcome' | 'login' }) {
+  const [mode, setMode] = useState<'welcome' | 'login' | 'signup' | 'forgot'>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pending = useRef(false);
+
   // Signs in or creates an account using the selected form.
   async function submit() {
+    if (pending.current) return;
+    pending.current = true;
     setError(null);
     setLoading(true);
     try {
@@ -31,9 +36,11 @@ export function AuthScreen() {
     } catch (error: any) {
       setError(error.message);
     } finally {
+      pending.current = false;
       setLoading(false);
     }
   }
+  if (mode === 'forgot') return <ForgotPasswordScreen email={email} onBack={() => { setMode('login'); setError(null); }} />;
   if (mode === 'welcome') return (
     <Layout>
       <Text style={{ color: C.ink, fontSize: 31, fontWeight: '900', marginTop: 35 }}>Here<Text style={{ color: C.green }}>Now</Text>
@@ -62,7 +69,7 @@ export function AuthScreen() {
   return (
     <Layout>
       <Text
-        onPress={() => setMode('welcome')}
+        disabled={loading} onPress={() => setMode('welcome')}
         style={{ color: C.green, fontWeight: '700', marginTop: 10 }}
       >‹ Back</Text>
       <Title>
@@ -89,6 +96,7 @@ export function AuthScreen() {
           placeholder="At least 6 characters"
           autoCapitalize="none"
         />
+        {mode === 'login' ? <Btn label="Forgot Password?" secondary disabled={loading} onPress={() => { setMode('forgot'); setError(null); setPassword(''); }} /> : null}
         <ErrorText message={error} />
         <Btn
           label={loading ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Log in'}
@@ -98,6 +106,7 @@ export function AuthScreen() {
         <Btn
           label={mode === 'signup' ? 'Already a member? Log in' : 'New here? Create an account'}
           secondary
+          disabled={loading}
           onPress={() => {
             setMode(mode === 'signup' ? 'login' : 'signup');
             setError(null);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C } from '../theme/theme';
 import { activityFilters, ActivityFilter, api, formatActivityTime, milesBetween, nearbyUrl, Post, timeAgo } from '../lib/api';
@@ -6,23 +6,36 @@ import { Center } from './LocationScreen';
 import { ErrorText, IconButton, Loading, Muted, Title } from '../components/ui';
 
 // Shows nearby activities with search and category filters.
-export function FeedScreen({ center, radius, onRadiusChange, onMap, onPost, onLocation }: { center: Center; radius: number; onRadiusChange: (radius: number) => void; onMap: () => void; onPost: (id: string) => void; onLocation: () => void }) {
+export function FeedScreen({ center, radius, onRadiusChange, category, onCategoryChange, time, onTimeChange, search, onSearchChange, onMap, onPost, onLocation }: {
+  center: Center;
+  radius: number;
+  onRadiusChange: (radius: number) => void;
+  category: string;
+  onCategoryChange: (category: string) => void;
+  time: ActivityFilter;
+  onTimeChange: (time: ActivityFilter) => void;
+  search: string;
+  onSearchChange: (search: string) => void;
+  onMap: () => void;
+  onPost: (id: string) => void;
+  onLocation: () => void;
+}) {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [category, setCategory] = useState('All');
-  const [search, setSearch] = useState('');
-  const [time, setTime] = useState<ActivityFilter>('now');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadVersion = useRef(0);
 
   // Loads activities using the current location and filters.
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setError(null);
     try {
-      setPosts(await api<Post[]>(nearbyUrl(center.latitude, center.longitude, radius, category, search, time)));
+      const nextPosts = await api<Post[]>(nearbyUrl(center.latitude, center.longitude, radius, category, search, time));
+      if (version === loadVersion.current) setPosts(nextPosts);
     } catch (error: any) {
-      setError(error.message);
+      if (version === loadVersion.current) setError(error.message);
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, [center.latitude, center.longitude, radius, category, search, time]);
   useEffect(() => {
@@ -30,7 +43,10 @@ export function FeedScreen({ center, radius, onRadiusChange, onMap, onPost, onLo
     const refreshTimeout = setTimeout(() => {
       void load();
     }, 250);
-    return () => clearTimeout(refreshTimeout);
+    return () => {
+      clearTimeout(refreshTimeout);
+      loadVersion.current++;
+    };
   }, [load]);
   return (
     <ScrollView
@@ -52,7 +68,7 @@ export function FeedScreen({ center, radius, onRadiusChange, onMap, onPost, onLo
       <Muted>Start nearby. Find something worth joining.</Muted>
       <TextInput
         value={search}
-        onChangeText={setSearch}
+        onChangeText={onSearchChange}
         placeholder="Search activities"
         placeholderTextColor="#7F8C82"
         style={styles.search}
@@ -65,7 +81,7 @@ export function FeedScreen({ center, radius, onRadiusChange, onMap, onPost, onLo
         {['All', 'Food', 'Sports', 'Music', 'Outdoors', 'Social', 'Other'].map(filterCategory => (
           <Pressable
             key={filterCategory}
-            onPress={() => setCategory(filterCategory)}
+            onPress={() => onCategoryChange(filterCategory)}
             style={[styles.chip, category === filterCategory && { backgroundColor: C.ink }]}
           >
             <Text style={{ color: category === filterCategory ? 'white' : C.muted, fontSize: 12, fontWeight: '600' }}>
@@ -101,7 +117,7 @@ export function FeedScreen({ center, radius, onRadiusChange, onMap, onPost, onLo
         {activityFilters.map(({ value, label }) => (
           <Pressable
             key={value}
-            onPress={() => setTime(value)}
+            onPress={() => onTimeChange(value)}
             style={[styles.chip, time === value && { backgroundColor: C.ink }]}
           >
             <Text style={{ color: time === value ? 'white' : C.muted, fontSize: 12 }}>{label}</Text>
@@ -139,9 +155,11 @@ export function FeedScreen({ center, radius, onRadiusChange, onMap, onPost, onLo
             </Muted>
             <Muted style={{ marginTop: 6 }}>🕒 {formatActivityTime(post.activity_at)}</Muted>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-              <Text style={{ color: C.ink, fontSize: 12 }}>👤 {post.creatorName}
+              <Text numberOfLines={1} style={{ color: C.ink, fontSize: 12, flex: 1, marginRight: 10 }}>👤 {post.creatorName}
               </Text>
-              <Text style={{ color: C.green, fontSize: 12 }}>View details →</Text>
+              <Text style={{ color: C.green, fontSize: 12, flexShrink: 0 }}>
+                {post.interested ? `Interested ✓ · ${post.interestCount}` : `${post.interestCount} interested`}
+              </Text>
             </View>
           </View>
         </Pressable>

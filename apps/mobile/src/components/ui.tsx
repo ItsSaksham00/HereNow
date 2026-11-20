@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../theme/theme';
 
-// Provides the shared page background and optional scrolling.
-
-export function Layout({ children, scroll = true }: { children: React.ReactNode; scroll?: boolean }) {
+// Provides the shared page layout with optional scrolling and refresh.
+export function Layout({ children, scroll = true, refreshing = false, onRefresh }: {
+  children: React.ReactNode;
+  scroll?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+}) {
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
       {scroll ? (
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" nestedScrollEnabled>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" nestedScrollEnabled
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.green} /> : undefined}>
           {children}
         </ScrollView>
       ) : (
